@@ -10,16 +10,21 @@
 
 #include "L138_LCDK_aic3106_init.h"
 #include "math.h"
+
 #define PI 3.141592654
 #define FS 44100 //Sampling frequency
 #define BUFSIZE 3 //Need 3 samples for difference eqn
 #define BW 5000
 
 // Each element will hold a left and right sample
-typedef struct STEREO {
-  int16_t LEFT;
-  int16_t RIGHT;
-} s_int16;
+struct STEREO {
+int16_t s_left;
+int16_t s_right;
+};
+
+
+
+typedef struct STEREO s_int16;
 
 //int16_t Linput,Rinput;
 s_int16 input[3];
@@ -50,13 +55,13 @@ void APBandReject() {
 
   //  Calculate new outputs using difference equations
   //  May need to typecast
-  filtered[0].LEFT = (1-c)/2*input[0].LEFT - (1-c)*d*input[1].LEFT
-         + input[2].LEFT*(1-c)/2 - d*(1-c)*filtered[1].LEFT
-         + c*filtered[2].LEFT;
-  
-  filtered[0].RIGHT = (1-c)/2*input[0].RIGHT - (1-c)*d*input[1].RIGHT
-         + input[2].RIGHT*(1-c)/2 - d*(1-c)*filtered[1].RIGHT
-         + c*filtered[2].RIGHT;
+  filtered[0].s_left = (1-c)/2*input[0].s_left - (1-c)*d*input[1].s_left
+         + input[2].s_left*(1-c)/2 - d*(1-c)*filtered[1].s_left
+         + c*filtered[2].s_left;
+
+  filtered[0].s_right = (1-c)/2*input[0].s_right - (1-c)*d*input[1].s_right
+         + input[2].s_right*(1-c)/2 - d*(1-c)*filtered[1].s_right
+         + c*filtered[2].s_right;
 
   return;
 }
@@ -66,23 +71,23 @@ interrupt void interrupt4(void) // interrupt service routine
   int i;
   codec_data.uint = input_sample();
   // left and right channel inputs
-  input[0].LEFT = codec_data.channel[LEFT];
-  input[0].RIGHT = codec_data.channel[RIGHT];
+  input[0].s_left = codec_data.channel[LEFT];
+  input[0].s_right = codec_data.channel[RIGHT];
 
   // Run filtering
   APBandReject();
 
   //output stereo signal
-  codec_data.channel[LEFT] = filtered[0].LEFT*mix + input[0].LEFT*(1-mix);
-  codec_data.channel[RIGHT] = filtered[0].RIGHT*mix + input[0].RIGHT*(1-mix);
+  codec_data.channel[LEFT] = filtered[0].s_left*mix + input[0].s_left*(1-mix);
+  codec_data.channel[RIGHT] = filtered[0].s_right*mix + input[0].s_right*(1-mix);
   output_sample(codec_data.uint);
 
   // Need to shift arrays to prepare for next sample
   for(i=BUFSIZE-1; i>0; i--){
-    input[i].LEFT = input[i-1].LEFT;
-    input[i].RIGHT = input[i-1].RIGHT;
-    filtered[i].LEFT = filtered[i-1].LEFT;
-    filtered[i].RIGHT = filtered[i-1].RIGHT;
+    input[i].s_left = input[i-1].s_left;
+    input[i].s_right = input[i-1].s_right;
+    filtered[i].s_left = filtered[i-1].s_left;
+    filtered[i].s_right = filtered[i-1].s_right;
     // 0 indexed samples will be replaced at next interrupt
   }
   return;
@@ -91,19 +96,17 @@ interrupt void interrupt4(void) // interrupt service routine
 int main(void)
 {
   int i;
-  minf = 200; 
+  minf = 200;
   maxf = 10000; // These will change with GEL files
   mix = .5;
   lfo_freq = .5;
   //Initialize buffers
   for(i=BUFSIZE-1; i>=0; i--){
-    input[i].LEFT = 0;
-    input[i].RIGHT = 0;
-    filtered[i].LEFT = 0;
-    filtered[i].RIGHT = 0;
+    input[i].s_left = 0;
+    input[i].s_right = 0;
+    filtered[i].s_left = 0;
+    filtered[i].s_right = 0;
   }
   L138_initialise_intr(FS_44100_HZ,ADC_GAIN_0DB,DAC_ATTEN_0DB,LCDK_LINE_INPUT);
   while(1);
-
-  return 0;
 }
