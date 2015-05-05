@@ -14,54 +14,52 @@
 #define PI 3.141592654
 #define FS 44100 //Sampling frequency
 #define BUFSIZE 3 //Need 3 samples for difference eqn
-#define BW 5000
+#define TS .000022675737 //Sample period
 
 // Each element will hold a left and right sample
-struct STEREO {
-int16_t s_left;
-int16_t s_right;
-};
+typedef struct STEREO {
+float s_left;
+float s_right;
+} s_int16;
 
-
-
-typedef struct STEREO s_int16;
-
-//int16_t Linput,Rinput;
-s_int16 input[3];
-s_int16 filtered[3];
-// May not need to be volatile, but it probably should be
-// to keep gel files working (Are GELS treated as interupts?)
-volatile int minf, maxf, mix; //GEL Controlled
-volatile float lfo_freq;
+s_int16 input[BUFSIZE];
+s_int16 filtered[BUFSIZE];
+volatile int minf, maxf, BW; //GEL Controlled
+volatile float lfo_freq, mix;
 float t; //Keep track of global time
+
+float amp, offset, c, d, c1, c2;
+double fc, width;
 
 
 
 AIC31_data_type codec_data;
 
 void APBandReject() {
-  float amp, offset, width, d, c, fc;
 
   //Compute LFO components
-  t = t+1/FS; // New sample, update time
   amp = (maxf-minf)/2;
   offset = (maxf+minf)/2;
   fc = amp*sin(2*PI*lfo_freq*t) + offset; // Compute center frequency based on an LFO
   width = BW/FS; //Normalized bandwidth of filter
 
   // Calculate coefficients
-  d = -cos(2*PI*fc/FS);
-  c = (tan(PI*width)-1)/(tan(PI*width)+1);
+  //d = (-0.9889);
+  //c = (-0.8668);
+  c = -1*cos(2*PI*fc/FS);
+  d = (tan(PI*width)-1)/(tan(PI*width)+1);
+  c1 = (1-c)/2;
+  c2 = (1-c)*d;
+
 
   //  Calculate new outputs using difference equations
-  //  May need to typecast
-  filtered[0].s_left = (1-c)/2*input[0].s_left - (1-c)*d*input[1].s_left
-         + input[2].s_left*(1-c)/2 - d*(1-c)*filtered[1].s_left
-         + c*filtered[2].s_left;
-
-  filtered[0].s_right = (1-c)/2*input[0].s_right - (1-c)*d*input[1].s_right
-         + input[2].s_right*(1-c)/2 - d*(1-c)*filtered[1].s_right
+  filtered[0].s_right = c1*input[0].s_right + c2*input[1].s_right
+         + input[2].s_right*c1 - c2*filtered[1].s_right
          + c*filtered[2].s_right;
+
+  filtered[0].s_left = c1*input[0].s_left + c2*input[1].s_left
+         + input[2].s_left*c1 - c2*filtered[1].s_left
+         + c*filtered[2].s_left;
 
   return;
 }
@@ -69,17 +67,19 @@ void APBandReject() {
 interrupt void interrupt4(void) // interrupt service routine
 {
   int i;
+  t = (t<511) ? t+=TS : 0; //Reset time before it overflows
+  //t = (t + TS) % 511;
   codec_data.uint = input_sample();
   // left and right channel inputs
-  input[0].s_left = codec_data.channel[LEFT];
-  input[0].s_right = codec_data.channel[RIGHT];
+  input[0].s_left = (float) codec_data.channel[LEFT];
+  input[0].s_right =(float) codec_data.channel[RIGHT];
 
   // Run filtering
   APBandReject();
 
   //output stereo signal
-  codec_data.channel[LEFT] = filtered[0].s_left*mix + input[0].s_left*(1-mix);
-  codec_data.channel[RIGHT] = filtered[0].s_right*mix + input[0].s_right*(1-mix);
+  codec_data.channel[LEFT] = (uint16_t) (filtered[0].s_left*mix + input[0].s_left*(1-mix));
+  codec_data.channel[RIGHT] = (uint16_t) (filtered[0].s_right*mix + input[0].s_right*(1-mix));
   output_sample(codec_data.uint);
 
   // Need to shift arrays to prepare for next sample
@@ -96,10 +96,11 @@ interrupt void interrupt4(void) // interrupt service routine
 int main(void)
 {
   int i;
+  t = 0;
   minf = 200;
   maxf = 10000; // These will change with GEL files
-  mix = .5;
-  lfo_freq = .5;
+  mix = .8;
+  lfo_freq = 1; //Fill with good starting values
   //Initialize buffers
   for(i=BUFSIZE-1; i>=0; i--){
     input[i].s_left = 0;
