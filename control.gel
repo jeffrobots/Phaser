@@ -1,0 +1,26 @@
+menuitem "Phaser Control";
+
+slider LFO(0, 10, .1, .1, lfo_slider)
+{
+	lfo_freq = gain_slider;
+}
+
+slider Bandwidth(100, 10000, 10, 10, bandwidth)
+{
+	BW = bandwidth;
+}
+
+slider Minimum(50, 5000, 10, 10, min)
+{
+	minf = min;
+}
+
+slider Maximum(500, 15000, 10, 10, max)
+{
+	maxf = max;
+}
+
+slider Mix(0, 100, 1, 1, mixer)
+{
+	mix = mixer*.1;
+}
