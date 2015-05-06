@@ -1,61 +1,40 @@
-function LFO_phaser()
-	clear all;
-	close all;
+clear all 
+close all
+mix = .8;
 	inputf = 'string.wav';
-	[input, Fs, N] = wavread(inputf);
+	[input, Fs] = wavread(inputf);
+	input = input(:,1); %%Select only one channel
+
 	minf = 200;
-	maxf = 8000;
-	Fph = 10;
-	deltaF = Fph/Fs % Normalize phaser oscillation to sampling freq
-	%%Create lookup table of center frequencies
-	
-	fc = minf:deltaF:maxf;
-	padnum = length(input);
-	fc = padarray(fc, [0 padnum], 'symmetric', 'post');
-	%% Make sure that the array fc is the proper length
-	fc = fc(1:length(input));
-	%%%% In C
-	%		FLFO = 20 //hz
+	maxf = 10000;
+	t = 0:(length(input)-1/Fs);
+	t = t/Fs;
+	A = (maxf-minf)/2;
+	Fph = .2; %% .5Hz LFO
+	offset = (maxf+minf)/2;
+	fc = A*sin(2*pi*Fph*t) + offset;
+	width = 5000/Fs; %% 50 hz width
 
-	%%%% t = 0.0
-	%%%% Fs = 44100
-	%%%% TS = 1/Fs;
-	%%%% interrupt interrupt4{
-	% 	t = t+Ts;
-	% 	LFO = Amplitude*sin(2*pi*FLFO*t);
+	%%Pass input through allpass phaser
+	y = AP_band_reject(input, fc, width, Fs); 
+    y = y/max(abs(y));
+    output = (y'*mix)+(input*(1-mix));
+    wavwrite(output, Fs, 'output.wav');
+    
+	figure
+	subplot(3, 1, 1)
+	plot(t,input, 'r');
 
-	% }
-	figure()
-	plot(fc)
-
-	width = 300; %% 50 hz width
-	BW = 2*width/Fs;
-
-	y = AP_band_reject(input, fc, BW);
-	y = y/max(abs(y));
-	wavwrite(y, Fs, N, 'output.wav');
-
-	figure()
-	hold on
-	plot(input, 'r');
-	plot(y, 'b');
-	title('Phaser (blue) vs Original Wave (red)')
-end
+	title('Plot of Original Signal')
+	subplot(3,1,2)
+	plot(t,output, 'b');
+	title('Plot of Signal After Phaser')
+	subplot(3, 1, 3)
+	%%plot(t, sin(2*3.14*Fph*t), 'g')
+	plot(t, fc, 'g')
+	title('Plot of LFO Controlled Center Frequencies')
 
 
-function y = AP_band_reject(x, fc, BW)
-	%% x is input sample waveform
-	%% fc is input center frequency
-	%% BW is input bandreject bandwidth
 
-	c = (tan(pi*BW/2)-1) / (tan(pi*BW/2) + 1);
-	
-	xh = [0, 0];
-	for n=1:length(x)
-		d = -cos(pi*fc(n));
-		xh_new = x(n) - d*(1-c)*xh(1) + c*xh(2);
-		ap_y = -c*xh_new + d*(1-c)*xh(1) + xh(2);
-		xh = [xh_new, xh(1)];
-		y(n) = .5*(x(n)-ap_y); % Bandreject
-	end
-end
+
+
